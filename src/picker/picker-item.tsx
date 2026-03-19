@@ -1,4 +1,4 @@
-import { ref, computed, onMounted, defineComponent, PropType, watch, inject, nextTick } from 'vue';
+import { ref, computed, onMounted, defineComponent, PropType, watch, inject, nextTick, onUnmounted } from 'vue';
 import { get as lodashGet } from 'lodash-es';
 import config from '../config';
 import Picker from './picker.class';
@@ -94,9 +94,8 @@ export default defineComponent({
             props.onPick?.(changeValue);
           },
           swipeDuration: props.swipeDuration,
+          onDestroy: onUnmounted,
         });
-
-        nextTick(() => picker?.updateItemHeight());
       }
     });
 

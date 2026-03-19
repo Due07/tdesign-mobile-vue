@@ -13,6 +13,7 @@ export interface PickerOptions {
   el: HTMLElement | HTMLDivElement | HTMLUListElement;
   onChange: (index: number) => void;
   swipeDuration?: string | number;
+  onDestroy?: (hook: () => void) => void;
 }
 
 const quartEaseOut = function (t: number, b: number, c: number, d: number) {
@@ -91,6 +92,9 @@ class Picker {
 
   pickerColumns: PickerColumn;
 
+  // 观察器 cb
+  #observer?: IntersectionObserver = undefined;
+
   constructor(options: PickerOptions) {
     if (!options.el) throw new Error('options el needed!');
     this.holder = options.el;
@@ -98,6 +102,8 @@ class Picker {
     this.options = options;
     this.onChange = options.onChange;
     this.swipeDuration = options.swipeDuration ?? DEFAULT_SWIPE_DURATION;
+
+    if (options?.onDestroy) options?.onDestroy(this.destroy);
 
     this.init();
   }
@@ -109,6 +115,7 @@ class Picker {
     this.setSelectedClassName();
     // 绑定事件
     this.bindEvent();
+    this.initObserver();
   }
 
   /**
@@ -121,14 +128,45 @@ class Picker {
     this.offsetYOfEndBound = -(this.itemHeight * (itemLen - 3) + OFFSET_OF_BOUND);
   }
 
+  initObserver() {
+    if (this.#observer) return;
+    this.#observer = new IntersectionObserver(
+      ([entries]) => {
+        if (entries.isIntersecting) this.updateItemHeight();
+      },
+      { root: this.holder?.parentElement },
+    );
+    this.#observer.observe(this.holder);
+  }
+
+  /**
+   * @description 释放观察者、元素强引用
+   */
+  private removeObserver() {
+    if (this.#observer) {
+      this.#observer.disconnect();
+      this.#observer = undefined;
+    }
+  }
+
   /**
    * @description 更新 itemHeight 函数
    */
   updateItemHeight(): void {
-    this.itemGroupHeight = this.holder.parentElement?.offsetHeight || DEFAULT_HOLDER_HEIGHT;
+    const transformHeight: Partial<Record<keyof Picker, number>> = {
+      itemGroupHeight: this.holder.parentElement?.offsetHeight || DEFAULT_HOLDER_HEIGHT,
+      itemHeight: this.holder.querySelector('li')?.offsetHeight || DEFAULT_ITEM_HEIGHT,
+      height: this.holder.offsetHeight || DEFAULT_HOLDER_HEIGHT,
+    };
+    const isRepeat = (Object.entries(transformHeight) as [keyof Picker, number][]).reduce((pre, [key, value]) => {
+      const target = this[key];
+      (this[key] as Picker[typeof key]) = value;
 
-    this.itemHeight = this.holder.querySelector('li')?.offsetHeight || DEFAULT_ITEM_HEIGHT;
-    this.height = this.holder.offsetHeight || DEFAULT_HOLDER_HEIGHT;
+      return !pre ? pre : target === value;
+    }, true);
+
+    // 重复计算则跳过
+    if (isRepeat) return;
 
     this.indicatorOffset = this.itemGroupHeight / 2 - this.itemHeight / 2;
 
@@ -431,6 +469,8 @@ class Picker {
   destroy(): void {
     // @ts-ignore: TODO
     delete this.holder;
+
+    this.removeObserver();
   }
 }
 
